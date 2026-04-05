@@ -2,7 +2,7 @@
 	"name": "create-vibing",
 	"type": "module",
 	"private": false,
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "Setup your development environment for agentic development",
 	"author": "mohiwalla",
 	"license": "MIT",
@@ -28,7 +28,7 @@
 	},
 	"scripts": {
 		"dev": "bun --watch src/cli.tsx",
-		"build": "bun build src/cli.tsx --target node --outdir dist --external cfonts",
+		"build": "bun build src/cli.tsx --target bun --outdir dist --external cfonts",
 		"format": "prettier --write ."
 	},
 	"peerDependencies": {
