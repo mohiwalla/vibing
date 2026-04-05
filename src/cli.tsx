@@ -1,10 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import meow from "meow"
 import { render } from "ink"
 
 import App from "@/app"
-import chalk from "chalk"
 
 const cli = meow(
 	`

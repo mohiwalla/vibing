@@ -28,7 +28,7 @@
 	},
 	"scripts": {
 		"dev": "bun --watch src/cli.tsx",
-		"build": "bun build src/cli.tsx --target bun --outdir dist --external cfonts",
+		"build": "bun build src/cli.tsx --target bun --outdir dist --external cfonts --minify",
 		"format": "prettier --write ."
 	},
 	"peerDependencies": {
