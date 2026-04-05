@@ -2,7 +2,7 @@
 	"name": "create-vibing",
 	"type": "module",
 	"private": false,
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "Setup your development environment for agentic development",
 	"author": "mohiwalla",
 	"license": "MIT",
