@@ -53,10 +53,6 @@ function CheckAzure() {
 				<Br />
 				<CheckAzureDevOps />
 				<Br />
-				<CheckAzureDevOpsOrg />
-				<Br />
-				<CheckAzureDevOpsProject />
-				<Br />
 				<CheckAzureDevOpsUsername />
 			</Intendation>
 		</Text>
@@ -110,7 +106,7 @@ function CheckClockifyApiKey() {
 				</Text>
 			) : (
 				<Text color={apiKey ? "green" : "red"}>
-					{apiKey ? "************" + apiKey.slice(-4) : "not set"}
+					{apiKey ? "*".repeat(16) + apiKey.slice(-4) : "not set"}
 				</Text>
 			)}
 		</Text>
@@ -231,62 +227,6 @@ function CheckAzureDevOps() {
 			) : (
 				<Text color={azureDevOpsPath ? "green" : "red"}>
 					{azureDevOpsPath || "devops extension missing"}
-				</Text>
-			)}
-		</Text>
-	)
-}
-
-function CheckAzureDevOpsOrg() {
-	const { passedStages, setPassedStages } = useGlobalStore()
-	const [org, setOrg] = useState<string | null>(null)
-
-	useEffect(() => {
-		$`printenv AZURE_DEVOPS_ORG`.text().then(raw => {
-			setOrg(raw.trim())
-			setPassedStages(passedStages.add("existing-azure-devops-org"))
-		})
-	}, [])
-
-	return (
-		<Text>
-			<Arrow varient={3} color="yellow" />
-			<Text bold> AZURE_DEVOPS_ORG: </Text>
-
-			{org === null ? (
-				<Text color="blue">
-					<Spinner />
-				</Text>
-			) : (
-				<Text color={org ? "green" : "red"}>{org || "not set"}</Text>
-			)}
-		</Text>
-	)
-}
-
-function CheckAzureDevOpsProject() {
-	const { passedStages, setPassedStages } = useGlobalStore()
-	const [project, setProject] = useState<string | null>(null)
-
-	useEffect(() => {
-		$`printenv AZURE_DEVOPS_PROJECT`.text().then(raw => {
-			setProject(raw.trim())
-			setPassedStages(passedStages.add("existing-azure-devops-project"))
-		})
-	}, [])
-
-	return (
-		<Text>
-			<Arrow varient={3} color="yellow" />
-			<Text bold> AZURE_DEVOPS_PROJECT: </Text>
-
-			{project === null ? (
-				<Text color="blue">
-					<Spinner />
-				</Text>
-			) : (
-				<Text color={project ? "green" : "red"}>
-					{project || "not set"}
 				</Text>
 			)}
 		</Text>
