@@ -2,15 +2,16 @@ import Arrow from "@/components/primtives/arrow"
 import Intendation from "@/components/primtives/indentation"
 import { Br } from "@/components/primtives/line-break"
 import { useGlobalStore } from "@/stores/global"
+import type { CheckKey } from "@/types/checks"
 import { EXISTING_INSTALLATION_STAGES, type Stage } from "@/types/stage"
 import { normalizeHomePath } from "@/utils/path"
 import { $ } from "bun"
 import { Text } from "ink"
 import Spinner from "ink-spinner"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 
 export function ExistingInstallations() {
-	const { passedStages } = useGlobalStore()
+	const passedStages = useGlobalStore((state) => state.passedStages)
 	const isComplete = EXISTING_INSTALLATION_STAGES.every((stage) =>
 		passedStages.has(stage)
 	)
@@ -104,19 +105,25 @@ function CheckEnvVar({
 	mask = false,
 }: {
 	label: string
-	checkKey:
+	checkKey: Extract<
+		CheckKey,
 		| "azureDevopsUsername"
 		| "clockifyApiKey"
 		| "clockifyUserId"
 		| "clockifyWorkspaceId"
+	>
 	stage: Stage
 	mask?: boolean
 }) {
-	const { checks, setCheck, markStage } = useGlobalStore()
-	const [value, setValue] = useState<string | null>(null)
+	const value = useGlobalStore((state) => state.checks[checkKey])
+	const status = useGlobalStore((state) => state.checkStatus[checkKey])
+	const startCheck = useGlobalStore((state) => state.startCheck)
+	const resolveCheck = useGlobalStore((state) => state.resolveCheck)
+	const markStage = useGlobalStore((state) => state.markStage)
 
 	useEffect(() => {
 		let cancelled = false
+		startCheck(checkKey)
 
 		$`printenv ${label}`
 			.text()
@@ -124,38 +131,34 @@ function CheckEnvVar({
 				if (cancelled) return
 
 				const trimmed = raw.trim()
-				setValue(trimmed)
-				setCheck(checkKey, trimmed)
+				resolveCheck(checkKey, trimmed)
 				markStage(stage)
 			})
 			.catch(() => {
 				if (cancelled) return
 
-				setValue("")
-				setCheck(checkKey, "")
+				resolveCheck(checkKey, "")
 				markStage(stage)
 			})
 
 		return () => {
 			cancelled = true
 		}
-	}, [checkKey, label, markStage, setCheck, stage])
-
-	const resolvedValue = value ?? checks[checkKey]
+	}, [checkKey, label, markStage, resolveCheck, stage, startCheck])
 
 	return (
 		<Text>
 			<Arrow varient={3} color="yellow" /> <Text bold>{label}: </Text>
-			{resolvedValue === null ? (
+			{status !== "resolved" ? (
 				<Text color="blue">
 					<Spinner />
 				</Text>
 			) : (
-				<Text color={resolvedValue ? "green" : "red"}>
-					{resolvedValue
+				<Text color={value ? "green" : "red"}>
+					{value
 						? mask
-							? maskSecretLastFour(resolvedValue)
-							: resolvedValue
+							? maskSecretLastFour(value)
+							: value
 						: "not set"}
 				</Text>
 			)}
@@ -164,11 +167,15 @@ function CheckEnvVar({
 }
 
 function CheckAzureCli() {
-	const { checks, setCheck, markStage } = useGlobalStore()
-	const [azureCliPath, setAzureCliPath] = useState<string | null>(null)
+	const azureCliPath = useGlobalStore((state) => state.checks.azureCliPath)
+	const status = useGlobalStore((state) => state.checkStatus.azureCliPath)
+	const startCheck = useGlobalStore((state) => state.startCheck)
+	const resolveCheck = useGlobalStore((state) => state.resolveCheck)
+	const markStage = useGlobalStore((state) => state.markStage)
 
 	useEffect(() => {
 		let cancelled = false
+		startCheck("azureCliPath")
 
 		const checkAzureCli = async () => {
 			try {
@@ -177,14 +184,12 @@ function CheckAzureCli() {
 				)
 				if (cancelled) return
 
-				setAzureCliPath(path)
-				setCheck("azureCliPath", path)
+				resolveCheck("azureCliPath", path)
 				markStage("existing-azure-cli")
 			} catch {
 				if (cancelled) return
 
-				setAzureCliPath("")
-				setCheck("azureCliPath", "")
+				resolveCheck("azureCliPath", "")
 				markStage("existing-azure-cli")
 			}
 		}
@@ -194,21 +199,19 @@ function CheckAzureCli() {
 		return () => {
 			cancelled = true
 		}
-	}, [markStage, setCheck])
-
-	const resolvedValue = azureCliPath ?? checks.azureCliPath
+	}, [markStage, resolveCheck, startCheck])
 
 	return (
 		<Text>
 			<Arrow varient={3} color="yellow" />
 			<Text bold> azure-cli: </Text>
-			{resolvedValue === null ? (
+			{status !== "resolved" ? (
 				<Text color="blue">
 					<Spinner />
 				</Text>
 			) : (
-				<Text color={resolvedValue ? "green" : "red"}>
-					{resolvedValue || "az not found"}
+				<Text color={azureCliPath ? "green" : "red"}>
+					{azureCliPath || "az not found"}
 				</Text>
 			)}
 		</Text>
@@ -216,36 +219,27 @@ function CheckAzureCli() {
 }
 
 function CheckAzureDevOps() {
-	const { checks, passedStages, setCheck, markStage } = useGlobalStore()
-	const [azureDevOpsPath, setAzureDevOpsPath] = useState<string | null>(null)
-	const [shouldCheckAzureDevOps, setShouldCheckAzureDevOps] = useState<
-		boolean | null
-	>(null)
+	const passedStages = useGlobalStore((state) => state.passedStages)
+	const azureCliPath = useGlobalStore((state) => state.checks.azureCliPath)
+	const azureDevOpsPath = useGlobalStore(
+		(state) => state.checks.azureDevopsPath
+	)
+	const status = useGlobalStore((state) => state.checkStatus.azureDevopsPath)
+	const startCheck = useGlobalStore((state) => state.startCheck)
+	const resolveCheck = useGlobalStore((state) => state.resolveCheck)
+	const markStage = useGlobalStore((state) => state.markStage)
 
 	useEffect(() => {
+		if (!passedStages.has("existing-azure-cli")) return
+
 		let cancelled = false
+		startCheck("azureDevopsPath")
 
 		const checkAzureDevOps = async () => {
-			try {
-				const azureCliPath = (await $`which az`.text()).trim()
-				if (!azureCliPath) {
-					if (cancelled) return
-
-					setShouldCheckAzureDevOps(false)
-					setAzureDevOpsPath("")
-					setCheck("azureDevopsPath", "")
-					markStage("existing-azure-devops")
-					return
-				}
-
-				if (cancelled) return
-				setShouldCheckAzureDevOps(true)
-			} catch {
+			if (!azureCliPath) {
 				if (cancelled) return
 
-				setShouldCheckAzureDevOps(false)
-				setAzureDevOpsPath("")
-				setCheck("azureDevopsPath", "")
+				resolveCheck("azureDevopsPath", "")
 				markStage("existing-azure-devops")
 				return
 			}
@@ -258,14 +252,12 @@ function CheckAzureDevOps() {
 				if (cancelled) return
 
 				const path = normalizeHomePath(dump.path ?? "")
-				setAzureDevOpsPath(path)
-				setCheck("azureDevopsPath", path)
+				resolveCheck("azureDevopsPath", path)
 				markStage("existing-azure-devops")
 			} catch {
 				if (cancelled) return
 
-				setAzureDevOpsPath("")
-				setCheck("azureDevopsPath", "")
+				resolveCheck("azureDevopsPath", "")
 				markStage("existing-azure-devops")
 			}
 		}
@@ -275,28 +267,23 @@ function CheckAzureDevOps() {
 		return () => {
 			cancelled = true
 		}
-	}, [markStage, setCheck])
+	}, [azureCliPath, markStage, passedStages, resolveCheck, startCheck])
 
-	if (
-		!passedStages.has("existing-azure-cli") ||
-		shouldCheckAzureDevOps === false
-	) {
+	if (!passedStages.has("existing-azure-cli") || !azureCliPath) {
 		return null
 	}
-
-	const resolvedValue = azureDevOpsPath ?? checks.azureDevopsPath
 
 	return (
 		<Text>
 			<Arrow varient={3} color="yellow" />
 			<Text bold> azure-devops: </Text>
-			{resolvedValue === null ? (
+			{status !== "resolved" ? (
 				<Text color="blue">
 					<Spinner />
 				</Text>
 			) : (
-				<Text color={resolvedValue ? "green" : "red"}>
-					{resolvedValue || "devops extension missing"}
+				<Text color={azureDevOpsPath ? "green" : "red"}>
+					{azureDevOpsPath || "devops extension missing"}
 				</Text>
 			)}
 		</Text>

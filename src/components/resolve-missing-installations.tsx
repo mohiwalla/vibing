@@ -3,6 +3,7 @@ import Intendation from "@/components/primtives/indentation"
 import { Br } from "@/components/primtives/line-break"
 import { useGlobalStore } from "@/stores/global"
 import type { CheckKey, Checks } from "@/types/checks"
+import type { PromptConfig } from "@/types/setup"
 import { EXISTING_INSTALLATION_STAGES } from "@/types/stage"
 import { fetchClockifyContext, getClockifyApiKeyHelp } from "@/utils/clockify"
 import { upsertEnvVar } from "@/utils/env"
@@ -10,24 +11,11 @@ import { normalizeHomePath } from "@/utils/path"
 import { $ } from "bun"
 import { Text, useApp, useInput } from "ink"
 import Spinner from "ink-spinner"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 
 type SetupFlags = {
 	clockify?: boolean
 	azure?: boolean
-}
-
-type PromptConfig = {
-	checkKey: CheckKey
-	envName: string
-	label: string
-	secret?: boolean
-	help?: string[]
-}
-
-type FailedTask = {
-	id: string
-	message: string
 }
 
 const PROMPT_ORDER: PromptConfig[] = [
@@ -57,18 +45,49 @@ const PROMPT_ORDER: PromptConfig[] = [
 
 export function ResolveMissingInstallations({ clockify, azure }: SetupFlags) {
 	const { exit } = useApp()
-	const { checks, passedStages, setCheck, markStage, setError } =
-		useGlobalStore()
-	const [runningTask, setRunningTask] = useState<string | null>(null)
-	const [runningLabel, setRunningLabel] = useState<string>("")
-	const [activePrompt, setActivePrompt] = useState<PromptConfig | null>(null)
-	const [promptValue, setPromptValue] = useState("")
-	const [failedTask, setFailedTask] = useState<FailedTask | null>(null)
-	const [savedRcPath, setSavedRcPath] = useState<string | null>(null)
-	const [statusNote, setStatusNote] = useState<string | null>(null)
-	const [lastClockifyLookupApiKey, setLastClockifyLookupApiKey] = useState<
-		string | null
-	>(null)
+	const checks = useGlobalStore((state) => state.checks)
+	const passedStages = useGlobalStore((state) => state.passedStages)
+	const setCheck = useGlobalStore((state) => state.setCheck)
+	const markStage = useGlobalStore((state) => state.markStage)
+	const setError = useGlobalStore((state) => state.setError)
+	const runningTask = useGlobalStore(
+		(state) => state.workflow.runningTask
+	)
+	const runningLabel = useGlobalStore(
+		(state) => state.workflow.runningLabel
+	)
+	const activePrompt = useGlobalStore(
+		(state) => state.workflow.activePrompt
+	)
+	const promptValue = useGlobalStore(
+		(state) => state.workflow.promptValue
+	)
+	const failedTask = useGlobalStore(
+		(state) => state.workflow.failedTask
+	)
+	const savedRcPath = useGlobalStore(
+		(state) => state.workflow.savedRcPath
+	)
+	const statusNote = useGlobalStore(
+		(state) => state.workflow.statusNote
+	)
+	const lastClockifyLookupApiKey = useGlobalStore(
+		(state) => state.workflow.lastClockifyLookupApiKey
+	)
+	const startTask = useGlobalStore((state) => state.startTask)
+	const stopTask = useGlobalStore((state) => state.stopTask)
+	const setActivePrompt = useGlobalStore((state) => state.setActivePrompt)
+	const setPromptValue = useGlobalStore((state) => state.setPromptValue)
+	const appendPromptValue = useGlobalStore(
+		(state) => state.appendPromptValue
+	)
+	const popPromptValue = useGlobalStore((state) => state.popPromptValue)
+	const setFailedTask = useGlobalStore((state) => state.setFailedTask)
+	const setSavedRcPath = useGlobalStore((state) => state.setSavedRcPath)
+	const setStatusNote = useGlobalStore((state) => state.setStatusNote)
+	const setLastClockifyLookupApiKey = useGlobalStore(
+		(state) => state.setLastClockifyLookupApiKey
+	)
 
 	const checksComplete = EXISTING_INSTALLATION_STAGES.every((stage) =>
 		passedStages.has(stage)
@@ -95,23 +114,25 @@ export function ResolveMissingInstallations({ clockify, azure }: SetupFlags) {
 		}
 
 		if (key.backspace || key.delete) {
-			setPromptValue((value) => value.slice(0, -1))
+			popPromptValue()
 			return
 		}
 
 		if (key.ctrl || key.meta || !input) return
 
-		setPromptValue((value) => value + input)
+		appendPromptValue(input)
 	})
 
 	useEffect(() => {
 		if (!checksComplete || runningTask || activePrompt || failedTask) return
 
 		const runTask = async () => {
+			let taskId = "setup"
+
 			try {
 				if (handleAzure && !checks.azureCliPath) {
-					setRunningTask("install-azure-cli")
-					setRunningLabel("Installing azure-cli with Homebrew")
+					taskId = "install-azure-cli"
+					startTask(taskId, "Installing azure-cli with Homebrew")
 
 					await $`brew install azure-cli`.quiet()
 					const path = normalizeHomePath(
@@ -129,8 +150,9 @@ export function ResolveMissingInstallations({ clockify, azure }: SetupFlags) {
 				}
 
 				if (handleAzure && !checks.azureDevopsPath) {
-					setRunningTask("install-azure-devops")
-					setRunningLabel(
+					taskId = "install-azure-devops"
+					startTask(
+						taskId,
 						"Installing azure-devops Azure CLI extension"
 					)
 
@@ -158,8 +180,9 @@ export function ResolveMissingInstallations({ clockify, azure }: SetupFlags) {
 					(!checks.clockifyUserId || !checks.clockifyWorkspaceId) &&
 					lastClockifyLookupApiKey !== checks.clockifyApiKey
 				) {
-					setRunningTask("lookup-clockify-context")
-					setRunningLabel(
+					taskId = "lookup-clockify-context"
+					startTask(
+						taskId,
 						"Fetching Clockify user and workspace from API key"
 					)
 
@@ -203,12 +226,11 @@ export function ResolveMissingInstallations({ clockify, azure }: SetupFlags) {
 						: "Unknown setup error"
 				setError(message)
 				setFailedTask({
-					id: runningTask ?? "setup",
+					id: taskId,
 					message,
 				})
 			} finally {
-				setRunningTask(null)
-				setRunningLabel("")
+				stopTask()
 			}
 		}
 
@@ -223,8 +245,15 @@ export function ResolveMissingInstallations({ clockify, azure }: SetupFlags) {
 		lastClockifyLookupApiKey,
 		markStage,
 		runningTask,
+		startTask,
+		setActivePrompt,
 		setCheck,
 		setError,
+		setFailedTask,
+		setLastClockifyLookupApiKey,
+		setPromptValue,
+		setStatusNote,
+		stopTask,
 	])
 
 	useEffect(() => {

@@ -7,17 +7,17 @@ import { OS } from "@/utils/config"
 import { $ } from "bun"
 import { Text } from "ink"
 import Spinner from "ink-spinner"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 
 export function VerifyEnv() {
-	const { passedStages } = useGlobalStore()
+	const passedStages = useGlobalStore((state) => state.passedStages)
 
 	return (
 		<Text>
 			<Arrow />
 			<Text bold> Verifying environment </Text>
 
-			{!passedStages.has("os") && !passedStages.has("brew") && (
+			{(!passedStages.has("os") || !passedStages.has("brew")) && (
 				<Text color="blue">
 					<Spinner type="weather" />
 				</Text>
@@ -35,35 +35,44 @@ export function VerifyEnv() {
 }
 
 function VerifyOS() {
-	const { markStage } = useGlobalStore()
-	const [isSupportedOS, setIsSupportedOS] = useState(false)
+	const isSupportedOS = useGlobalStore((state) => state.osSupported)
+	const setOsSupported = useGlobalStore((state) => state.setOsSupported)
+	const markStage = useGlobalStore((state) => state.markStage)
 
 	useEffect(() => {
 		const isSupported = checkSupportedOS()
-		setIsSupportedOS(isSupported)
+		setOsSupported(isSupported)
 
 		if (!isSupported) {
 			process.exit(1)
 		}
 
 		markStage("os")
-	}, [])
+	}, [markStage, setOsSupported])
 
 	return (
 		<Text>
 			<Arrow varient={2} color="red" />
 			<Text bold> OS: </Text>
 
-			<Text color={isSupportedOS ? "green" : "red"}>
-				{isSupportedOS ? OS : `NOT supported on ${OS} ☹️`}
-			</Text>
+			{isSupportedOS === null ? (
+				<Text color="blue">
+					<Spinner />
+				</Text>
+			) : (
+				<Text color={isSupportedOS ? "green" : "red"}>
+					{isSupportedOS ? OS : `NOT supported on ${OS} ☹️`}
+				</Text>
+			)}
 		</Text>
 	)
 }
 
 function VerifyBrew() {
-	const { passedStages, markStage } = useGlobalStore()
-	const [homebrewPath, setHomebrewPath] = useState<string | null>(null)
+	const passedStages = useGlobalStore((state) => state.passedStages)
+	const homebrewPath = useGlobalStore((state) => state.brewPath)
+	const setBrewPath = useGlobalStore((state) => state.setBrewPath)
+	const markStage = useGlobalStore((state) => state.markStage)
 
 	useEffect(() => {
 		let cancelled = false
@@ -73,7 +82,7 @@ function VerifyBrew() {
 				const path = (await $`which brew`.text()).trim()
 				if (cancelled) return
 
-				setHomebrewPath(path)
+				setBrewPath(path)
 
 				if (!path) {
 					process.exit(1)
@@ -83,7 +92,7 @@ function VerifyBrew() {
 			} catch {
 				if (cancelled) return
 
-				setHomebrewPath("")
+				setBrewPath("")
 				process.exit(1)
 			}
 		}
@@ -93,7 +102,7 @@ function VerifyBrew() {
 		return () => {
 			cancelled = true
 		}
-	}, [])
+	}, [markStage, setBrewPath])
 
 	if (!passedStages.has("os")) {
 		return null
