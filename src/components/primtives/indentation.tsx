@@ -12,7 +12,7 @@ export default function Indentation({
 
 	return (
 		<>
-			{React.Children.map(children, child => (
+			{React.Children.map(children, (child) => (
 				<Text>
 					{indent}
 					{child}

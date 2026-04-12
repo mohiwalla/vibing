@@ -1,5 +1,6 @@
 import { ExistingInstallations } from "@/components/check-existing-installations"
 import { Br } from "@/components/primtives/line-break"
+import { ResolveMissingInstallations } from "@/components/resolve-missing-installations"
 import { VerifyEnv } from "@/components/verify-env"
 import { APP_NAME } from "@/utils/config"
 import { Text } from "ink"
@@ -23,6 +24,7 @@ export default function App({ clockify, azure, slack }: SetupFlags) {
 			<Br />
 
 			<ExistingInstallations />
+			<ResolveMissingInstallations clockify={clockify} azure={azure} />
 		</Text>
 	)
 }

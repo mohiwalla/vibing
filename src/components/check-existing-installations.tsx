@@ -2,6 +2,7 @@ import Arrow from "@/components/primtives/arrow"
 import Intendation from "@/components/primtives/indentation"
 import { Br } from "@/components/primtives/line-break"
 import { useGlobalStore } from "@/stores/global"
+import { EXISTING_INSTALLATION_STAGES, type Stage } from "@/types/stage"
 import { normalizeHomePath } from "@/utils/path"
 import { $ } from "bun"
 import { Text } from "ink"
@@ -10,25 +11,20 @@ import { useEffect, useState } from "react"
 
 export function ExistingInstallations() {
 	const { passedStages } = useGlobalStore()
+	const isComplete = EXISTING_INSTALLATION_STAGES.every((stage) =>
+		passedStages.has(stage)
+	)
 
 	return (
 		<Text>
 			<Arrow />
 			<Text bold> Checking for existing installations </Text>
 
-			{!passedStages.has("existing-azure-cli") &&
-				!passedStages.has("existing-azure-devops") &&
-				!passedStages.has("existing-azure-devops-org") &&
-				!passedStages.has("existing-azure-devops-project") &&
-				!passedStages.has("existing-azure-devops-username") &&
-				!passedStages.has("existing-clockify-api-key") &&
-				!passedStages.has("existing-clockify-user-id") &&
-				!passedStages.has("existing-clockify-workspace-id") &&
-				!passedStages.has("existing-skills") && (
-					<Text color="blue">
-						<Spinner type="binary" />
-					</Text>
-				)}
+			{!isComplete && (
+				<Text color="blue">
+					<Spinner type="binary" />
+				</Text>
+			)}
 
 			<Br />
 
@@ -53,7 +49,11 @@ function CheckAzure() {
 				<Br />
 				<CheckAzureDevOps />
 				<Br />
-				<CheckAzureDevOpsUsername />
+				<CheckEnvVar
+					label="AZURE_DEVOPS_USERNAME"
+					checkKey="azureDevopsUsername"
+					stage="existing-azure-devops-username"
+				/>
 			</Intendation>
 		</Text>
 	)
@@ -67,11 +67,24 @@ function CheckClockify() {
 			<Br />
 
 			<Intendation size={8}>
-				<CheckClockifyApiKey />
+				<CheckEnvVar
+					label="CLOCKIFY_API_KEY"
+					checkKey="clockifyApiKey"
+					stage="existing-clockify-api-key"
+					mask
+				/>
 				<Br />
-				<CheckClockifyUserID />
+				<CheckEnvVar
+					label="CLOCKIFY_USER_ID"
+					checkKey="clockifyUserId"
+					stage="existing-clockify-user-id"
+				/>
 				<Br />
-				<CheckClockifyWorkspaceID />
+				<CheckEnvVar
+					label="CLOCKIFY_WORKSPACE_ID"
+					checkKey="clockifyWorkspaceId"
+					stage="existing-clockify-workspace-id"
+				/>
 			</Intendation>
 		</Text>
 	)
@@ -79,92 +92,71 @@ function CheckClockify() {
 
 function maskSecretLastFour(secret: string): string {
 	const trimmed = secret.trim()
-	if (trimmed.length === 0) return ""
+	if (!trimmed) return ""
 	if (trimmed.length <= 4) return "*".repeat(trimmed.length)
 	return "*".repeat(trimmed.length - 4) + trimmed.slice(-4)
 }
 
-function CheckClockifyApiKey() {
-	const { passedStages, setPassedStages } = useGlobalStore()
-	const [apiKey, setApiKey] = useState<string | null>(null)
+function CheckEnvVar({
+	label,
+	checkKey,
+	stage,
+	mask = false,
+}: {
+	label: string
+	checkKey:
+		| "azureDevopsUsername"
+		| "clockifyApiKey"
+		| "clockifyUserId"
+		| "clockifyWorkspaceId"
+	stage: Stage
+	mask?: boolean
+}) {
+	const { checks, setCheck, markStage } = useGlobalStore()
+	const [value, setValue] = useState<string | null>(null)
 
 	useEffect(() => {
-		$`printenv CLOCKIFY_API_KEY`.text().then(raw => {
-			setApiKey(raw.trim())
-			setPassedStages(passedStages.add("existing-clockify-api-key"))
-		})
-	}, [])
+		let cancelled = false
+
+		$`printenv ${label}`
+			.text()
+			.then((raw) => {
+				if (cancelled) return
+
+				const trimmed = raw.trim()
+				setValue(trimmed)
+				setCheck(checkKey, trimmed)
+				markStage(stage)
+			})
+			.catch(() => {
+				if (cancelled) return
+
+				setValue("")
+				setCheck(checkKey, "")
+				markStage(stage)
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [checkKey, label, markStage, setCheck, stage])
+
+	const resolvedValue = value ?? checks[checkKey]
 
 	return (
 		<Text>
-			<Arrow varient={3} color="yellow" />
-			<Text bold> CLOCKIFY_API_KEY: </Text>
-
-			{apiKey === null ? (
+			<Arrow varient={3} color="yellow" /> <Text bold>{label}: </Text>
+			{resolvedValue === null ? (
 				<Text color="blue">
 					<Spinner />
 				</Text>
 			) : (
-				<Text color={apiKey ? "green" : "red"}>
-					{apiKey ? "*".repeat(16) + apiKey.slice(-4) : "not set"}
-				</Text>
-			)}
-		</Text>
-	)
-}
-
-function CheckClockifyUserID() {
-	const { passedStages, setPassedStages } = useGlobalStore()
-	const [userID, setUserID] = useState<string | null>(null)
-
-	useEffect(() => {
-		$`printenv CLOCKIFY_USER_ID`.text().then(raw => {
-			setUserID(raw.trim())
-			setPassedStages(passedStages.add("existing-clockify-user-id"))
-		})
-	}, [])
-
-	return (
-		<Text>
-			<Arrow varient={3} color="yellow" />
-			<Text bold> CLOCKIFY_USER_ID: </Text>
-
-			{userID === null ? (
-				<Text color="blue">
-					<Spinner />
-				</Text>
-			) : (
-				<Text color={userID ? "green" : "red"}>
-					{userID || "not set"}
-				</Text>
-			)}
-		</Text>
-	)
-}
-
-function CheckClockifyWorkspaceID() {
-	const { passedStages, setPassedStages } = useGlobalStore()
-	const [workspaceID, setWorkspaceID] = useState<string | null>(null)
-
-	useEffect(() => {
-		$`printenv CLOCKIFY_WORKSPACE_ID`.text().then(raw => {
-			setWorkspaceID(raw.trim())
-			setPassedStages(passedStages.add("existing-clockify-workspace-id"))
-		})
-	}, [])
-
-	return (
-		<Text>
-			<Arrow varient={3} color="yellow" />
-			<Text bold> CLOCKIFY_WORKSPACE_ID: </Text>
-
-			{workspaceID === null ? (
-				<Text color="blue">
-					<Spinner />
-				</Text>
-			) : (
-				<Text color={workspaceID ? "green" : "red"}>
-					{workspaceID || "not set"}
+				<Text color={resolvedValue ? "green" : "red"}>
+					{resolvedValue
+						? mask
+							? maskSecretLastFour(resolvedValue)
+							: resolvedValue
+						: "not set"}
 				</Text>
 			)}
 		</Text>
@@ -172,7 +164,7 @@ function CheckClockifyWorkspaceID() {
 }
 
 function CheckAzureCli() {
-	const { passedStages, setPassedStages } = useGlobalStore()
+	const { checks, setCheck, markStage } = useGlobalStore()
 	const [azureCliPath, setAzureCliPath] = useState<string | null>(null)
 
 	useEffect(() => {
@@ -180,16 +172,20 @@ function CheckAzureCli() {
 
 		const checkAzureCli = async () => {
 			try {
-				const path = normalizeHomePath((await $`which az`.text()).trim())
+				const path = normalizeHomePath(
+					(await $`which az`.text()).trim()
+				)
 				if (cancelled) return
 
 				setAzureCliPath(path)
-				setPassedStages(passedStages.add("existing-azure-cli"))
+				setCheck("azureCliPath", path)
+				markStage("existing-azure-cli")
 			} catch {
 				if (cancelled) return
 
 				setAzureCliPath("")
-				setPassedStages(passedStages.add("existing-azure-cli"))
+				setCheck("azureCliPath", "")
+				markStage("existing-azure-cli")
 			}
 		}
 
@@ -198,20 +194,21 @@ function CheckAzureCli() {
 		return () => {
 			cancelled = true
 		}
-	}, [])
+	}, [markStage, setCheck])
+
+	const resolvedValue = azureCliPath ?? checks.azureCliPath
 
 	return (
 		<Text>
 			<Arrow varient={3} color="yellow" />
 			<Text bold> azure-cli: </Text>
-
-			{azureCliPath === null ? (
+			{resolvedValue === null ? (
 				<Text color="blue">
 					<Spinner />
 				</Text>
 			) : (
-				<Text color={azureCliPath ? "green" : "red"}>
-					{azureCliPath || "az not found"}
+				<Text color={resolvedValue ? "green" : "red"}>
+					{resolvedValue || "az not found"}
 				</Text>
 			)}
 		</Text>
@@ -219,7 +216,7 @@ function CheckAzureCli() {
 }
 
 function CheckAzureDevOps() {
-	const { passedStages, setPassedStages } = useGlobalStore()
+	const { checks, passedStages, setCheck, markStage } = useGlobalStore()
 	const [azureDevOpsPath, setAzureDevOpsPath] = useState<string | null>(null)
 	const [shouldCheckAzureDevOps, setShouldCheckAzureDevOps] = useState<
 		boolean | null
@@ -235,6 +232,9 @@ function CheckAzureDevOps() {
 					if (cancelled) return
 
 					setShouldCheckAzureDevOps(false)
+					setAzureDevOpsPath("")
+					setCheck("azureDevopsPath", "")
+					markStage("existing-azure-devops")
 					return
 				}
 
@@ -244,20 +244,29 @@ function CheckAzureDevOps() {
 				if (cancelled) return
 
 				setShouldCheckAzureDevOps(false)
+				setAzureDevOpsPath("")
+				setCheck("azureDevopsPath", "")
+				markStage("existing-azure-devops")
 				return
 			}
 
 			try {
-				const dump = await $`az extension show --name azure-devops`.json()
+				const dump =
+					(await $`az extension show --name azure-devops`.json()) as {
+						path?: string
+					}
 				if (cancelled) return
 
-				setAzureDevOpsPath(normalizeHomePath(dump.path ?? ""))
-				setPassedStages(passedStages.add("existing-azure-devops"))
+				const path = normalizeHomePath(dump.path ?? "")
+				setAzureDevOpsPath(path)
+				setCheck("azureDevopsPath", path)
+				markStage("existing-azure-devops")
 			} catch {
 				if (cancelled) return
 
 				setAzureDevOpsPath("")
-				setPassedStages(passedStages.add("existing-azure-devops"))
+				setCheck("azureDevopsPath", "")
+				markStage("existing-azure-devops")
 			}
 		}
 
@@ -266,7 +275,7 @@ function CheckAzureDevOps() {
 		return () => {
 			cancelled = true
 		}
-	}, [])
+	}, [markStage, setCheck])
 
 	if (
 		!passedStages.has("existing-azure-cli") ||
@@ -275,47 +284,19 @@ function CheckAzureDevOps() {
 		return null
 	}
 
+	const resolvedValue = azureDevOpsPath ?? checks.azureDevopsPath
+
 	return (
 		<Text>
 			<Arrow varient={3} color="yellow" />
 			<Text bold> azure-devops: </Text>
-
-			{azureDevOpsPath === null ? (
+			{resolvedValue === null ? (
 				<Text color="blue">
 					<Spinner />
 				</Text>
 			) : (
-				<Text color={azureDevOpsPath ? "green" : "red"}>
-					{azureDevOpsPath || "devops extension missing"}
-				</Text>
-			)}
-		</Text>
-	)
-}
-
-function CheckAzureDevOpsUsername() {
-	const { passedStages, setPassedStages } = useGlobalStore()
-	const [username, setUsername] = useState<string | null>(null)
-
-	useEffect(() => {
-		$`printenv AZURE_DEVOPS_USERNAME`.text().then(raw => {
-			setUsername(raw.trim())
-			setPassedStages(passedStages.add("existing-azure-devops-username"))
-		})
-	}, [])
-
-	return (
-		<Text>
-			<Arrow varient={3} color="yellow" />
-			<Text bold> AZURE_DEVOPS_USERNAME: </Text>
-
-			{username === null ? (
-				<Text color="blue">
-					<Spinner />
-				</Text>
-			) : (
-				<Text color={username ? "green" : "red"}>
-					{username || "not set"}
+				<Text color={resolvedValue ? "green" : "red"}>
+					{resolvedValue || "devops extension missing"}
 				</Text>
 			)}
 		</Text>

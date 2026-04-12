@@ -35,7 +35,7 @@ export function VerifyEnv() {
 }
 
 function VerifyOS() {
-	const { passedStages, setPassedStages } = useGlobalStore()
+	const { markStage } = useGlobalStore()
 	const [isSupportedOS, setIsSupportedOS] = useState(false)
 
 	useEffect(() => {
@@ -46,7 +46,7 @@ function VerifyOS() {
 			process.exit(1)
 		}
 
-		setPassedStages(passedStages.add("os"))
+		markStage("os")
 	}, [])
 
 	return (
@@ -62,7 +62,7 @@ function VerifyOS() {
 }
 
 function VerifyBrew() {
-	const { passedStages, setPassedStages } = useGlobalStore()
+	const { passedStages, markStage } = useGlobalStore()
 	const [homebrewPath, setHomebrewPath] = useState<string | null>(null)
 
 	useEffect(() => {
@@ -79,7 +79,7 @@ function VerifyBrew() {
 					process.exit(1)
 				}
 
-				setPassedStages(passedStages.add("brew"))
+				markStage("brew")
 			} catch {
 				if (cancelled) return
 
