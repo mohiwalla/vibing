@@ -176,10 +176,28 @@ function CheckAzureCli() {
 	const [azureCliPath, setAzureCliPath] = useState<string | null>(null)
 
 	useEffect(() => {
-		$`which az`.text().then(path => {
-			setAzureCliPath(normalizeHomePath(path))
-			setPassedStages(passedStages.add("existing-azure-cli"))
-		})
+		let cancelled = false
+
+		const checkAzureCli = async () => {
+			try {
+				const path = normalizeHomePath((await $`which az`.text()).trim())
+				if (cancelled) return
+
+				setAzureCliPath(path)
+				setPassedStages(passedStages.add("existing-azure-cli"))
+			} catch {
+				if (cancelled) return
+
+				setAzureCliPath("")
+				setPassedStages(passedStages.add("existing-azure-cli"))
+			}
+		}
+
+		checkAzureCli()
+
+		return () => {
+			cancelled = true
+		}
 	}, [])
 
 	return (
@@ -203,15 +221,57 @@ function CheckAzureCli() {
 function CheckAzureDevOps() {
 	const { passedStages, setPassedStages } = useGlobalStore()
 	const [azureDevOpsPath, setAzureDevOpsPath] = useState<string | null>(null)
+	const [shouldCheckAzureDevOps, setShouldCheckAzureDevOps] = useState<
+		boolean | null
+	>(null)
 
 	useEffect(() => {
-		$`az extension show --name azure-devops`.json().then(dump => {
-			setAzureDevOpsPath(normalizeHomePath(dump.path))
-			setPassedStages(passedStages.add("existing-azure-devops"))
-		})
+		let cancelled = false
+
+		const checkAzureDevOps = async () => {
+			try {
+				const azureCliPath = (await $`which az`.text()).trim()
+				if (!azureCliPath) {
+					if (cancelled) return
+
+					setShouldCheckAzureDevOps(false)
+					return
+				}
+
+				if (cancelled) return
+				setShouldCheckAzureDevOps(true)
+			} catch {
+				if (cancelled) return
+
+				setShouldCheckAzureDevOps(false)
+				return
+			}
+
+			try {
+				const dump = await $`az extension show --name azure-devops`.json()
+				if (cancelled) return
+
+				setAzureDevOpsPath(normalizeHomePath(dump.path ?? ""))
+				setPassedStages(passedStages.add("existing-azure-devops"))
+			} catch {
+				if (cancelled) return
+
+				setAzureDevOpsPath("")
+				setPassedStages(passedStages.add("existing-azure-devops"))
+			}
+		}
+
+		checkAzureDevOps()
+
+		return () => {
+			cancelled = true
+		}
 	}, [])
 
-	if (!passedStages.has("existing-azure-cli")) {
+	if (
+		!passedStages.has("existing-azure-cli") ||
+		shouldCheckAzureDevOps === false
+	) {
 		return null
 	}
 

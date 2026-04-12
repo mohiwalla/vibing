@@ -66,15 +66,33 @@ function VerifyBrew() {
 	const [homebrewPath, setHomebrewPath] = useState<string | null>(null)
 
 	useEffect(() => {
-		$`which brew`.text().then(path => {
-			setHomebrewPath(path)
+		let cancelled = false
 
-			if (!path) {
+		const verifyBrew = async () => {
+			try {
+				const path = (await $`which brew`.text()).trim()
+				if (cancelled) return
+
+				setHomebrewPath(path)
+
+				if (!path) {
+					process.exit(1)
+				}
+
+				setPassedStages(passedStages.add("brew"))
+			} catch {
+				if (cancelled) return
+
+				setHomebrewPath("")
 				process.exit(1)
 			}
+		}
 
-			setPassedStages(passedStages.add("brew"))
-		})
+		verifyBrew()
+
+		return () => {
+			cancelled = true
+		}
 	}, [])
 
 	if (!passedStages.has("os")) {
